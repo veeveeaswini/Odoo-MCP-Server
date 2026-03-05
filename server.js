@@ -330,7 +330,8 @@ const TOOLS = [
 // ── Execute Tool ──────────────────────────────────────────────────
 async function executeTool(name, p = {}) {
   if (name === "search_partners") {
-    const domain = [];
+    // Match Odoo UI: only main contacts, exclude child address records (invoice/delivery/other)
+    const domain = [["type", "=", "contact"]];
     if (p.name)        domain.push(["name", "ilike", p.name]);
     if (p.is_customer) domain.push(["customer_rank", ">", 0]);
     if (p.is_supplier) domain.push(["supplier_rank", ">", 0]);
