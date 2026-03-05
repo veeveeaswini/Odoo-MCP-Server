@@ -334,10 +334,15 @@ async function executeTool(name, p = {}) {
     if (p.name)        domain.push(["name", "ilike", p.name]);
     if (p.is_customer) domain.push(["customer_rank", ">", 0]);
     if (p.is_supplier) domain.push(["supplier_rank", ">", 0]);
-    return callOdoo("res.partner", "search_read", [domain], {
-      fields: ["id", "name", "email", "phone", "customer_rank", "supplier_rank", "city", "country_id"],
-      limit: p.limit || 10,
-    });
+    const limit = p.limit || 10;
+    const [records, total_count] = await Promise.all([
+      callOdoo("res.partner", "search_read", [domain], {
+        fields: ["id", "name", "email", "phone", "customer_rank", "supplier_rank", "city", "country_id"],
+        limit,
+      }),
+      callOdoo("res.partner", "search_count", [domain]),
+    ]);
+    return { total_count, returned: records.length, records };
   }
   if (name === "create_partner") {
     const id = await callOdoo("res.partner", "create", [p]);
@@ -347,10 +352,15 @@ async function executeTool(name, p = {}) {
     const domain = [];
     if (p.state)         domain.push(["state", "=", p.state]);
     if (p.customer_name) domain.push(["partner_id.name", "ilike", p.customer_name]);
-    return callOdoo("sale.order", "search_read", [domain], {
-      fields: ["id", "name", "partner_id", "state", "amount_total", "date_order"],
-      limit: p.limit || 10,
-    });
+    const limit = p.limit || 10;
+    const [records, total_count] = await Promise.all([
+      callOdoo("sale.order", "search_read", [domain], {
+        fields: ["id", "name", "partner_id", "state", "amount_total", "date_order"],
+        limit,
+      }),
+      callOdoo("sale.order", "search_count", [domain]),
+    ]);
+    return { total_count, returned: records.length, records };
   }
   if (name === "create_sales_order") {
     const vals = { partner_id: p.partner_id };
@@ -366,19 +376,29 @@ async function executeTool(name, p = {}) {
   if (name === "search_products") {
     const domain = [];
     if (p.name) domain.push(["name", "ilike", p.name]);
-    return callOdoo("product.template", "search_read", [domain], {
-      fields: ["id", "name", "list_price", "qty_available", "categ_id", "type", "default_code"],
-      limit: p.limit || 10,
-    });
+    const limit = p.limit || 10;
+    const [records, total_count] = await Promise.all([
+      callOdoo("product.template", "search_read", [domain], {
+        fields: ["id", "name", "list_price", "qty_available", "categ_id", "type", "default_code"],
+        limit,
+      }),
+      callOdoo("product.template", "search_count", [domain]),
+    ]);
+    return { total_count, returned: records.length, records };
   }
   if (name === "search_invoices") {
     const domain = [["move_type", "=", "out_invoice"]];
     if (p.state)         domain.push(["state", "=", p.state]);
     if (p.customer_name) domain.push(["partner_id.name", "ilike", p.customer_name]);
-    return callOdoo("account.move", "search_read", [domain], {
-      fields: ["id", "name", "partner_id", "state", "amount_total", "invoice_date", "invoice_date_due"],
-      limit: p.limit || 10,
-    });
+    const limit = p.limit || 10;
+    const [records, total_count] = await Promise.all([
+      callOdoo("account.move", "search_read", [domain], {
+        fields: ["id", "name", "partner_id", "state", "amount_total", "invoice_date", "invoice_date_due"],
+        limit,
+      }),
+      callOdoo("account.move", "search_count", [domain]),
+    ]);
+    return { total_count, returned: records.length, records };
   }
   if (name === "get_stock") {
     const domain = [];
@@ -392,10 +412,15 @@ async function executeTool(name, p = {}) {
     const domain = [];
     if (p.state)         domain.push(["state", "=", p.state]);
     if (p.supplier_name) domain.push(["partner_id.name", "ilike", p.supplier_name]);
-    return callOdoo("purchase.order", "search_read", [domain], {
-      fields: ["id", "name", "partner_id", "state", "amount_total", "date_order"],
-      limit: p.limit || 10,
-    });
+    const limit = p.limit || 10;
+    const [records, total_count] = await Promise.all([
+      callOdoo("purchase.order", "search_read", [domain], {
+        fields: ["id", "name", "partner_id", "state", "amount_total", "date_order"],
+        limit,
+      }),
+      callOdoo("purchase.order", "search_count", [domain]),
+    ]);
+    return { total_count, returned: records.length, records };
   }
   if (name === "create_product") {
     const vals = { name: p.name };
@@ -417,16 +442,20 @@ async function executeTool(name, p = {}) {
     if (p.partner_name) domain.push(["partner_name", "ilike", p.partner_name]);
     if (p.user_name)    domain.push(["user_id.name", "ilike", p.user_name]);
     if (p.priority)     domain.push(["priority", "=", p.priority]);
-    // default to active=true unless caller explicitly sets false
     domain.push(["active", "=", p.active !== undefined ? p.active : true]);
-    return callOdoo("crm.lead", "search_read", [domain], {
-      fields: [
-        "id", "name", "type", "partner_name", "contact_name", "email_from",
-        "phone", "stage_id", "priority", "expected_revenue", "probability",
-        "user_id", "team_id", "create_date", "date_deadline",
-      ],
-      limit: p.limit || 10,
-    });
+    const limit = p.limit || 10;
+    const [records, total_count] = await Promise.all([
+      callOdoo("crm.lead", "search_read", [domain], {
+        fields: [
+          "id", "name", "type", "partner_name", "contact_name", "email_from",
+          "phone", "stage_id", "priority", "expected_revenue", "probability",
+          "user_id", "team_id", "create_date", "date_deadline",
+        ],
+        limit,
+      }),
+      callOdoo("crm.lead", "search_count", [domain]),
+    ]);
+    return { total_count, returned: records.length, records };
   }
   if (name === "create_crm_lead") {
     const vals = { name: p.name, type: p.type || "lead" };
