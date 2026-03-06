@@ -85,6 +85,27 @@ const TOOLS = [
     },
   },
   {
+    name: "update_partner",
+    description: "Update an existing contact/customer/supplier in Odoo by ID or name",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id:            { type: "number",  description: "Partner ID to update (use id OR search_name)" },
+        search_name:   { type: "string",  description: "Partner name to look up if ID is unknown" },
+        name:          { type: "string",  description: "New full name" },
+        email:         { type: "string",  description: "Email address" },
+        phone:         { type: "string",  description: "Phone number" },
+        mobile:        { type: "string",  description: "Mobile number" },
+        street:        { type: "string",  description: "Street address" },
+        city:          { type: "string",  description: "City" },
+        is_company:    { type: "boolean", description: "True if company" },
+        customer_rank: { type: "number",  description: "Set 1 to mark as customer, 0 to unmark" },
+        supplier_rank: { type: "number",  description: "Set 1 to mark as supplier, 0 to unmark" },
+        active:        { type: "boolean", description: "false to archive the contact" },
+      },
+    },
+  },
+  {
     name: "create_partner",
     description: "Create a new customer or supplier contact in Odoo",
     inputSchema: {
@@ -100,6 +121,32 @@ const TOOLS = [
         street:        { type: "string",  description: "Street address" },
       },
       required: ["name"],
+    },
+  },
+  {
+    name: "update_sales_order",
+    description: "Update a draft sales order in Odoo by ID or order number (only draft/sent orders can be edited)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id:           { type: "number", description: "Sales order ID (use id OR search_name)" },
+        search_name:  { type: "string", description: "Order number to look up e.g. S00042" },
+        partner_id:   { type: "number", description: "Change customer (partner ID)" },
+        note:         { type: "string", description: "Internal notes" },
+        order_lines:  {
+          type: "array",
+          description: "Replace all order lines",
+          items: {
+            type: "object",
+            properties: {
+              product_id:      { type: "number", description: "Product ID" },
+              product_uom_qty: { type: "number", description: "Quantity" },
+              price_unit:      { type: "number", description: "Unit price" },
+            },
+          },
+        },
+      },
+      required: ["id"],
     },
   },
   {
@@ -138,6 +185,26 @@ const TOOLS = [
     },
   },
   {
+    name: "update_product",
+    description: "Update an existing product in Odoo by ID or name",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id:             { type: "number",  description: "Product template ID (use id OR search_name)" },
+        search_name:    { type: "string",  description: "Product name to look up if ID is unknown" },
+        name:           { type: "string",  description: "New product name" },
+        list_price:     { type: "number",  description: "Sales price" },
+        standard_price: { type: "number",  description: "Cost price" },
+        default_code:   { type: "string",  description: "Internal reference / SKU" },
+        type:           { type: "string",  description: "Product type: consu, service, or product" },
+        description:    { type: "string",  description: "Internal notes" },
+        barcode:        { type: "string",  description: "Barcode" },
+        active:         { type: "boolean", description: "false to archive the product" },
+      },
+      required: ["id"],
+    },
+  },
+  {
     name: "search_products",
     description: "Search for products in Odoo",
     inputSchema: {
@@ -169,6 +236,32 @@ const TOOLS = [
         product_name: { type: "string", description: "Filter by product name" },
         limit:        { type: "number", description: "Max results (default 10)" },
       },
+    },
+  },
+  {
+    name: "update_purchase_order",
+    description: "Update a draft purchase order in Odoo by ID or order number (only draft orders can be edited)",
+    inputSchema: {
+      type: "object",
+      properties: {
+        id:          { type: "number", description: "Purchase order ID (use id OR search_name)" },
+        search_name: { type: "string", description: "Order number to look up e.g. P00021" },
+        partner_id:  { type: "number", description: "Change supplier (partner ID)" },
+        notes:       { type: "string", description: "Internal notes" },
+        order_lines: {
+          type: "array",
+          description: "Replace all order lines",
+          items: {
+            type: "object",
+            properties: {
+              product_id:   { type: "number", description: "Product ID" },
+              product_qty:  { type: "number", description: "Quantity" },
+              price_unit:   { type: "number", description: "Unit price" },
+            },
+          },
+        },
+      },
+      required: ["id"],
     },
   },
   {
@@ -245,11 +338,12 @@ const TOOLS = [
   },
   {
     name: "update_crm_lead",
-    description: "Update fields on an existing CRM lead or opportunity",
+    description: "Update fields on an existing CRM lead or opportunity by ID or title",
     inputSchema: {
       type: "object",
       properties: {
-        id:                 { type: "number",  description: "Lead/opportunity ID to update (required)" },
+        id:                 { type: "number",  description: "Lead/opportunity ID (use id OR search_name)" },
+        search_name:        { type: "string",  description: "Lead title to look up if ID is unknown" },
         name:               { type: "string",  description: "New title" },
         type:               { type: "string",  description: "'lead' or 'opportunity'" },
         partner_name:       { type: "string",  description: "Company/customer name" },
@@ -327,6 +421,22 @@ const TOOLS = [
   },
 ];
 
+// ── Resolve record ID by name if needed ──────────────────────────
+async function resolveId(model, p, nameField = "name") {
+  if (p.id) return p.id;
+  if (!p.search_name) throw new Error(`Provide either 'id' or 'search_name' to identify the record`);
+  const results = await callOdoo(model, "search_read", [[[nameField, "ilike", p.search_name]]], {
+    fields: ["id", nameField],
+    limit: 5,
+  });
+  if (!results.length) throw new Error(`No record found in ${model} matching name: "${p.search_name}"`);
+  if (results.length > 1) {
+    const matches = results.map(r => `ID ${r.id}: ${r[nameField]}`).join(", ");
+    throw new Error(`Multiple matches found — be more specific or use id directly. Found: ${matches}`);
+  }
+  return results[0].id;
+}
+
 // ── Execute Tool ──────────────────────────────────────────────────
 async function executeTool(name, p = {}) {
   if (name === "search_partners") {
@@ -345,9 +455,29 @@ async function executeTool(name, p = {}) {
     ]);
     return { total_count, returned: records.length, records };
   }
+  if (name === "update_partner") {
+    const resolvedId = await resolveId("res.partner", p);
+    const { id, search_name, ...vals } = p;
+    if (!Object.keys(vals).length) throw new Error("No fields provided to update");
+    await callOdoo("res.partner", "write", [[resolvedId], vals]);
+    return { success: true, id: resolvedId, message: `Partner ${resolvedId} updated` };
+  }
   if (name === "create_partner") {
     const id = await callOdoo("res.partner", "create", [p]);
     return { success: true, id, message: `Partner created with ID ${id}` };
+  }
+  if (name === "update_sales_order") {
+    const resolvedId = await resolveId("sale.order", p);
+    const { id, search_name, order_lines, ...vals } = p;
+    if (order_lines && order_lines.length) {
+      vals.order_line = order_lines.map((l) => [
+        0, 0,
+        { product_id: l.product_id, product_uom_qty: l.product_uom_qty || 1, price_unit: l.price_unit || 0 },
+      ]);
+    }
+    if (!Object.keys(vals).length && !order_lines) throw new Error("No fields provided to update");
+    await callOdoo("sale.order", "write", [[resolvedId], vals]);
+    return { success: true, id: resolvedId, message: `Sales order ${resolvedId} updated` };
   }
   if (name === "search_sales_orders") {
     const domain = [];
@@ -373,6 +503,13 @@ async function executeTool(name, p = {}) {
     }
     const id = await callOdoo("sale.order", "create", [vals]);
     return { success: true, id, message: `Sales order created with ID ${id}` };
+  }
+  if (name === "update_product") {
+    const resolvedId = await resolveId("product.template", p);
+    const { id, search_name, ...vals } = p;
+    if (!Object.keys(vals).length) throw new Error("No fields provided to update");
+    await callOdoo("product.template", "write", [[resolvedId], vals]);
+    return { success: true, id: resolvedId, message: `Product ${resolvedId} updated` };
   }
   if (name === "search_products") {
     const domain = [];
@@ -402,12 +539,30 @@ async function executeTool(name, p = {}) {
     return { total_count, returned: records.length, records };
   }
   if (name === "get_stock") {
-    const domain = [];
+    const domain = [["location_id.usage", "=", "internal"]];
     if (p.product_name) domain.push(["product_id.name", "ilike", p.product_name]);
-    return callOdoo("stock.quant", "search_read", [domain], {
-      fields: ["product_id", "location_id", "quantity", "reserved_quantity"],
-      limit: p.limit || 10,
-    });
+    const limit = p.limit || 10;
+    const [records, total_count] = await Promise.all([
+      callOdoo("stock.quant", "search_read", [domain], {
+        fields: ["product_id", "location_id", "quantity", "reserved_quantity"],
+        limit,
+      }),
+      callOdoo("stock.quant", "search_count", [domain]),
+    ]);
+    return { total_count, returned: records.length, records };
+  }
+  if (name === "update_purchase_order") {
+    const resolvedId = await resolveId("purchase.order", p);
+    const { id, search_name, order_lines, ...vals } = p;
+    if (order_lines && order_lines.length) {
+      vals.order_line = order_lines.map((l) => [
+        0, 0,
+        { product_id: l.product_id, product_qty: l.product_qty || 1, price_unit: l.price_unit || 0 },
+      ]);
+    }
+    if (!Object.keys(vals).length && !order_lines) throw new Error("No fields provided to update");
+    await callOdoo("purchase.order", "write", [[resolvedId], vals]);
+    return { success: true, id: resolvedId, message: `Purchase order ${resolvedId} updated` };
   }
   if (name === "search_purchase_orders") {
     const domain = [];
@@ -475,10 +630,11 @@ async function executeTool(name, p = {}) {
     return { success: true, id, message: `CRM ${vals.type} created with ID ${id}` };
   }
   if (name === "update_crm_lead") {
-    const { id, ...rest } = p;
+    const resolvedId = await resolveId("crm.lead", p);
+    const { id, search_name, ...rest } = p;
     if (!Object.keys(rest).length) throw new Error("No fields provided to update");
-    await callOdoo("crm.lead", "write", [[id], rest]);
-    return { success: true, id, message: `CRM lead/opportunity ${id} updated` };
+    await callOdoo("crm.lead", "write", [[resolvedId], rest]);
+    return { success: true, id: resolvedId, message: `CRM lead/opportunity ${resolvedId} updated` };
   }
   if (name === "delete_crm_lead") {
     if (p.permanent) {
